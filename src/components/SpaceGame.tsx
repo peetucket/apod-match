@@ -20,20 +20,28 @@ const getRandomDate = (): string => {
   return randomDate.toISOString().split("T")[0];
 };
 
-const calculateScore = (userText: string, nasaText: string): { score: number; matchedWords: string[]; totalUserWords: number } => {
-  const cleanText = (text: string) => 
+const calculateScore = (
+  userText: string,
+  nasaText: string
+): { percent: number; matchedCount: number; matchedWords: string[]; totalUserWords: number } => {
+  const cleanText = (text: string) =>
     text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(word => word.length > 2);
-  
+
   const userWords = cleanText(userText);
   const nasaWords = new Set(cleanText(nasaText));
-  
+
   const matchedWords = userWords.filter(word => nasaWords.has(word));
   const uniqueMatches = [...new Set(matchedWords)];
-  
+
+  const matchedCount = uniqueMatches.length;
+  const totalUserWords = userWords.length;
+  const percent = Math.round((matchedCount / Math.max(1, totalUserWords)) * 100);
+
   return {
-    score: uniqueMatches.length,
+    percent,
+    matchedCount,
     matchedWords: uniqueMatches,
-    totalUserWords: userWords.length
+    totalUserWords,
   };
 };
 
@@ -42,7 +50,7 @@ const SpaceGame = () => {
   const [loading, setLoading] = useState(false);
   const [userDescription, setUserDescription] = useState("");
   const [gameState, setGameState] = useState<"idle" | "playing" | "submitted">("idle");
-  const [scoreData, setScoreData] = useState<{ score: number; matchedWords: string[]; totalUserWords: number } | null>(null);
+  const [scoreData, setScoreData] = useState<{ percent: number; matchedCount: number; matchedWords: string[]; totalUserWords: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAPOD = useCallback(async () => {
@@ -50,26 +58,26 @@ const SpaceGame = () => {
     setError(null);
     setUserDescription("");
     setScoreData(null);
-    
+
     const date = getRandomDate();
-    
+
     try {
       const response = await fetch(
         `https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&date=${date}`
       );
-      
+
       if (!response.ok) {
         throw new Error("Failed to fetch from NASA API");
       }
-      
+
       const data: APODData = await response.json();
-      
+
       if (data.media_type !== "image") {
         // Try again if it's a video
         fetchAPOD();
         return;
       }
-      
+
       setApodData(data);
       setGameState("playing");
     } catch (err) {
@@ -82,7 +90,7 @@ const SpaceGame = () => {
 
   const handleSubmit = () => {
     if (!apodData || !userDescription.trim()) return;
-    
+
     const result = calculateScore(userDescription, apodData.explanation);
     setScoreData(result);
     setGameState("submitted");
@@ -98,7 +106,7 @@ const SpaceGame = () => {
   return (
     <div className="min-h-screen relative overflow-hidden">
       <div className="starfield" />
-      
+
       <div className="relative z-10 container mx-auto px-4 py-8 md:py-12">
         {/* Header */}
         <header className="text-center mb-8 md:mb-12 animate-fade-in">
@@ -126,9 +134,9 @@ const SpaceGame = () => {
                 <p className="text-muted-foreground mb-8 max-w-md mx-auto">
                   We'll show you a random NASA image from the past. Your challenge: describe what you see!
                 </p>
-                <Button 
-                  variant="cosmic" 
-                  size="xl" 
+                <Button
+                  variant="cosmic"
+                  size="xl"
                   onClick={fetchAPOD}
                   disabled={loading}
                 >
@@ -188,8 +196,8 @@ const SpaceGame = () => {
                   <p className="text-muted-foreground text-sm">
                     {userDescription.trim().split(/\s+/).filter(w => w.length > 0).length} words
                   </p>
-                  <Button 
-                    variant="cosmic" 
+                  <Button
+                    variant="cosmic"
                     size="lg"
                     onClick={handleSubmit}
                     disabled={!userDescription.trim()}
@@ -208,22 +216,22 @@ const SpaceGame = () => {
               <div className="bg-card/50 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-border/50 text-center">
                 <div className="inline-flex items-center justify-center w-24 h-24 md:w-32 md:h-32 rounded-full bg-gradient-score mb-6 shadow-glow-secondary">
                   <span className="font-display text-4xl md:text-5xl font-bold text-foreground">
-                    {scoreData.score}
+                    {scoreData.percent}%
                   </span>
                 </div>
                 <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-2">
                   Words Matched!
                 </h2>
                 <p className="text-muted-foreground mb-4">
-                  You used {scoreData.totalUserWords} words, {scoreData.score} matched NASA's description
+                  You used {scoreData.totalUserWords} words, {scoreData.matchedCount} matched NASA's description ({scoreData.percent}%)
                 </p>
-                
+
                 {scoreData.matchedWords.length > 0 && (
                   <div className="mb-6">
                     <p className="text-sm text-muted-foreground mb-2">Matching words:</p>
                     <div className="flex flex-wrap gap-2 justify-center">
                       {scoreData.matchedWords.slice(0, 20).map((word, i) => (
-                        <span 
+                        <span
                           key={i}
                           className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm font-medium"
                         >
@@ -259,7 +267,7 @@ const SpaceGame = () => {
                     {apodData.title}
                   </h3>
                   <p className="text-muted-foreground text-sm mb-4">{apodData.date}</p>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <h4 className="text-sm font-semibold text-primary mb-2">Your Description:</h4>
