@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Rocket, Star, RefreshCw, Send, Sparkles } from "lucide-react";
+import { Rocket, Star, RefreshCw, Send, Sparkles, Lightbulb } from "lucide-react";
 
 interface APODData {
   title: string;
@@ -46,6 +46,13 @@ const STOPWORDS = new Set([
   'somewhere', 'nothing', 'nowhere', 'anything', 'anyone', 'anywhere'
 ]);
 
+const getKeyWords = (text: string): string[] => {
+  return text.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter(word => word.length > 3 && !STOPWORDS.has(word));
+};
+
 const calculateScore = (userText: string, nasaText: string): { score: number; matchedWords: string[]; totalUserWords: number } => {
   const cleanText = (text: string) => 
     text.toLowerCase()
@@ -73,12 +80,37 @@ const SpaceGame = () => {
   const [gameState, setGameState] = useState<"idle" | "playing" | "submitted">("idle");
   const [scoreData, setScoreData] = useState<{ score: number; matchedWords: string[]; totalUserWords: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [revealedHints, setRevealedHints] = useState<string[]>([]);
+
+  const MAX_HINTS = 3;
+
+  // Get unique key words from the NASA description for hints
+  const hintWords = useMemo(() => {
+    if (!apodData) return [];
+    const words = getKeyWords(apodData.explanation);
+    const uniqueWords = [...new Set(words)];
+    // Shuffle and pick words that are at least 4 characters
+    return uniqueWords
+      .filter(w => w.length >= 4)
+      .sort(() => Math.random() - 0.5);
+  }, [apodData]);
+
+  const handleUseHint = () => {
+    if (hintsUsed >= MAX_HINTS || hintsUsed >= hintWords.length) return;
+    
+    const nextHint = hintWords[hintsUsed];
+    setRevealedHints(prev => [...prev, nextHint]);
+    setHintsUsed(prev => prev + 1);
+  };
 
   const fetchAPOD = useCallback(async () => {
     setLoading(true);
     setError(null);
     setUserDescription("");
     setScoreData(null);
+    setHintsUsed(0);
+    setRevealedHints([]);
     
     const date = getRandomDate();
     
@@ -122,6 +154,8 @@ const SpaceGame = () => {
     setApodData(null);
     setScoreData(null);
     setUserDescription("");
+    setHintsUsed(0);
+    setRevealedHints([]);
   };
 
   return (
@@ -202,6 +236,43 @@ const SpaceGame = () => {
                 </div>
               </div>
 
+              {/* Hints Section */}
+              <div className="bg-card/50 backdrop-blur-md rounded-2xl p-4 md:p-6 border border-border/50">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Lightbulb className="w-5 h-5 text-accent" />
+                    <span className="font-display font-semibold text-foreground">Hints</span>
+                    <span className="text-muted-foreground text-sm">({MAX_HINTS - hintsUsed} remaining)</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUseHint}
+                    disabled={hintsUsed >= MAX_HINTS || hintsUsed >= hintWords.length}
+                    className="border-accent/50 text-accent hover:bg-accent/10"
+                  >
+                    <Lightbulb className="w-4 h-4 mr-1" />
+                    Get Hint
+                  </Button>
+                </div>
+                {revealedHints.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {revealedHints.map((hint, i) => (
+                      <span
+                        key={i}
+                        className="px-3 py-1.5 bg-accent/20 text-accent rounded-full text-sm font-medium animate-scale-in"
+                      >
+                        {hint}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    Need help? Use hints to reveal key words from NASA's description.
+                  </p>
+                )}
+              </div>
+
               {/* Input Section */}
               <div className="bg-card/50 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-border/50">
                 <label className="block text-foreground font-display font-semibold text-lg mb-3">
@@ -245,6 +316,7 @@ const SpaceGame = () => {
                 </h2>
                 <p className="text-muted-foreground mb-4">
                   You used {scoreData.totalUserWords} meaningful words, {scoreData.score} matched NASA's description
+                  {hintsUsed > 0 && <span className="text-accent"> (used {hintsUsed} hint{hintsUsed > 1 ? 's' : ''})</span>}
                 </p>
                 
                 {scoreData.matchedWords.length > 0 && (
